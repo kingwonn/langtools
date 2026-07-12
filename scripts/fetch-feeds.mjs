@@ -100,6 +100,17 @@ async function fetchSourceInner(source) {
     feed = await parser.parseURL(source.feed);
     if (!feed.items?.length) throw new Error('feed empty');
   } catch (primaryErr) {
+    // Substack 原生域名对数据中心 IP 一律 403，走 OpenRSS 公共代理兜底
+    const host = new URL(source.feed).hostname;
+    if (host.endsWith('.substack.com')) {
+      try {
+        feed = await parser.parseURL(`https://openrss.org/${host}`);
+        if (feed.items?.length) {
+          console.warn(`  ↻ ${source.id}: 直连被拒，经 OpenRSS 代理获取`);
+          return feed;
+        }
+      } catch { /* 代理也失败则继续走自动发现 */ }
+    }
     const discovered = await discoverFeed(source.url);
     if (!discovered) throw primaryErr;
     feed = discovered.feed;
