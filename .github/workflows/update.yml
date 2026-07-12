@@ -6,7 +6,7 @@ on:
     - cron: "30 22 * * *"
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, claude/english-blog-aggregator-lroq5w]
 
 permissions:
   contents: write
@@ -58,6 +58,11 @@ jobs:
             git commit -m "chore: daily content update"
             git push
           fi
+
+      - name: Configure Pages (auto-enable on first run)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
