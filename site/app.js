@@ -38,6 +38,10 @@ const fmtDate = (iso) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+const DIM_LABEL = {
+  tech: '技术', industry: '行业', investing: '投资', debate: '争论',
+};
+
 const dots = (n) => {
   const lv = Math.min(3, Math.max(1, Number(n) || 1));
   return '●'.repeat(lv) + '○'.repeat(3 - lv);
@@ -369,6 +373,23 @@ function renderWikiEntry(slug) {
     )
     .join('');
   const misc = (e.misconceptions_zh || []).map((m) => `<p class="misconception">⚠️ ${esc(m)}</p>`).join('');
+  const devs = (e.developments_zh || [])
+    .map(
+      (d) => `<li class="dev-item"><span class="dev-period">${esc(d.period)}</span>${esc(d.point_zh)}</li>`,
+    )
+    .join('');
+  const memory = (e.memory || [])
+    .map(
+      (m) => `
+      <li class="memory-item">
+        <span class="dim-badge dim-${esc(m.dimension)}">${DIM_LABEL[m.dimension] || esc(m.dimension)}</span>
+        <div class="memory-body">
+          <div class="memory-claim">${esc(m.claim_zh)}</div>
+          <div class="memory-src"><a href="${safeUrl(m.link)}" target="_blank" rel="noopener">${esc(m.title)}</a> · ${esc(m.source || '')} · ${fmtDate(m.date)}</div>
+        </div>
+      </li>`,
+    )
+    .join('');
 
   app.innerHTML = `
     <div class="wiki-entry">
@@ -385,8 +406,10 @@ function renderWikiEntry(slug) {
 
       ${e.why_matters_zh ? `<div class="wiki-section"><h2>Why it matters · 为什么重要</h2><p class="def-zh">${esc(e.why_matters_zh)}</p></div>` : ''}
       ${kp ? `<div class="wiki-section"><h2>Key points · 核心要点</h2><table class="kp-table">${kp}</table></div>` : ''}
+      ${devs ? `<div class="wiki-section"><h2>Developments · 最新动态与争论 <span class="synth-note">🧠 由记忆巩固生成</span></h2><ul class="dev-list">${devs}</ul></div>` : ''}
       ${misc ? `<div class="wiki-section"><h2>Common misconceptions · 常见误解</h2>${misc}</div>` : ''}
       ${terms ? `<div class="wiki-section"><h2>Terms · 高频术语</h2><div class="term-list">${terms}</div></div>` : ''}
+      ${memory ? `<div class="wiki-section"><h2>Memory · 观点记忆</h2><p class="memory-intro">从每日文章中提取的关于此概念的论断，按时间倒序——这是词条持续进化的原材料。</p><ul class="memory-list">${memory}</ul></div>` : ''}
       ${related ? `<div class="wiki-section"><h2>Related · 相关概念</h2><div class="concept-links">${related}</div></div>` : ''}
       ${refs ? `<div class="wiki-section"><h2>Coverage · 相关文章</h2><ul class="ref-list">${refs}</ul></div>` : ''}
       <p class="meta-line">${e.origin === 'curated' ? '✍️ 人工撰写的种子词条' : '🤖 由 Claude 生成'} · 更新于 ${fmtDate(e.updated_at)}</p>

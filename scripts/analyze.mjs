@@ -62,6 +62,32 @@ const ANALYSIS_SCHEMA = {
       description:
         '1-4 个文章涉及的核心概念 slug（kebab-case 英文，如 world-models, dcf-valuation）。优先复用已有 slug 列表中的条目；只有确实是新概念时才创建新 slug。',
     },
+    insights: {
+      type: 'array',
+      description:
+        '0-2 条值得长期记住的核心论断——将沉淀进知识库词条的记忆时间线。只收有信息增量的判断（新数据、明确立场、预测、反共识观点），泛泛的常识不收；没有就返回空数组。',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['claim_zh', 'dimension', 'concepts'],
+        properties: {
+          claim_zh: {
+            type: 'string',
+            description: '一句话中文论断，含关键数字/主体/立场，脱离原文也能独立理解',
+          },
+          dimension: {
+            type: 'string',
+            enum: ['tech', 'industry', 'investing', 'debate'],
+            description: 'tech=技术进展, industry=行业动态, investing=投资含义, debate=分歧争论',
+          },
+          concepts: {
+            type: 'array',
+            items: { type: 'string' },
+            description: '该论断关联的概念 slug（与上面 concepts 字段同规则）',
+          },
+        },
+      },
+    },
   },
 };
 
@@ -78,7 +104,8 @@ const SYSTEM = `你是一个双语阅读助手，服务对象是一位以中文�
 对给定的英文文章做结构化分析。要求：
 - 摘要忠于原文，不脑补；文章信息不足时保守概括
 - 词汇选取"值得学"的：高频学术词、地道搭配、行业术语，跳过过于基础或过于生僻的词
-- concepts 是知识库词条的索引：只选文章实质讨论的概念，不要泛泛的大词（如 "ai"、"technology"）`;
+- concepts 是知识库词条的索引：只选文章实质讨论的概念，不要泛泛的大词（如 "ai"、"technology"）
+- insights 是知识库的长期记忆：只提取真正有信息增量的论断（作者的明确判断、新数据、预测、与主流相反的观点），并注明它属于哪个维度；宁缺毋滥`;
 
 async function analyzeOne(client, article, sourceName, existingSlugs) {
   const userPrompt = `已有概念 slug 列表（优先复用）：${existingSlugs.join(', ') || '(暂无)'}
@@ -109,6 +136,10 @@ ${article.snippet || '(RSS 未提供正文，仅根据标题保守分析)'}`;
   result.concepts = [...new Set(
     (result.concepts || []).map(normalizeSlug).filter((s) => s.length >= 2),
   )];
+  result.insights = (result.insights || []).map((ins) => ({
+    ...ins,
+    concepts: [...new Set((ins.concepts || []).map(normalizeSlug).filter((s) => s.length >= 2))],
+  }));
   return result;
 }
 

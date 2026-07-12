@@ -249,6 +249,37 @@ html[data-theme="dark"] .chip.active { color: #1a120c; }
   background: var(--bg-inset); border-left: 3px solid var(--accent); border-radius: 0 10px 10px 0;
   padding: 10px 14px; font-size: 14px; color: var(--ink-soft); margin: 0 0 8px;
 }
+.synth-note { font-size: 11px; color: var(--ink-faint); text-transform: none; letter-spacing: 0; margin-left: 8px; }
+.dev-list { margin: 0; padding: 0; list-style: none; }
+.dev-item {
+  padding: 10px 0; border-top: 1px solid var(--line); font-size: 14.5px; color: var(--ink-soft);
+  line-height: 1.7;
+}
+.dev-item:first-child { border-top: none; }
+.dev-period {
+  display: inline-block; font-size: 11.5px; font-weight: 700; color: var(--accent-ink);
+  background: var(--accent-soft); border-radius: 5px; padding: 1px 8px; margin-right: 10px;
+  font-family: var(--mono); vertical-align: 1px;
+}
+.memory-intro { font-size: 13px; color: var(--ink-faint); margin: 0 0 12px; }
+.memory-list { margin: 0; padding: 0; list-style: none; }
+.memory-item {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 10px 0; border-top: 1px dashed var(--line);
+}
+.memory-item:first-child { border-top: none; }
+.dim-badge {
+  flex: none; font-size: 11px; font-weight: 700; border-radius: 5px; padding: 2px 8px;
+  letter-spacing: 1px; margin-top: 2px; border: 1px solid currentColor;
+}
+.dim-tech { color: var(--badge-b2); }
+.dim-industry { color: var(--badge-b1); }
+.dim-investing { color: var(--badge-c1); }
+.dim-debate { color: var(--badge-c2); }
+.memory-claim { font-size: 14px; color: var(--ink); line-height: 1.65; }
+.memory-src { font-size: 12px; color: var(--ink-faint); margin-top: 3px; }
+.memory-src a { color: var(--ink-faint); text-decoration: underline; text-decoration-color: var(--line); }
+
 .ref-list { margin: 0; padding: 0; list-style: none; font-size: 14px; }
 .ref-list li { padding: 7px 0; border-top: 1px solid var(--line); }
 .ref-list li:first-child { border-top: none; }
