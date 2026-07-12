@@ -106,9 +106,9 @@ ${article.snippet || '(RSS 未提供正文，仅根据标题保守分析)'}`;
   const text = response.content.find((b) => b.type === 'text')?.text;
   if (!text) throw new Error('empty response');
   const result = JSON.parse(text);
-  result.concepts = (result.concepts || [])
-    .map(normalizeSlug)
-    .filter((s) => s.length >= 2);
+  result.concepts = [...new Set(
+    (result.concepts || []).map(normalizeSlug).filter((s) => s.length >= 2),
+  )];
   return result;
 }
 
@@ -137,10 +137,15 @@ async function main() {
   const existingSlugs = Object.keys(wikiFile.entries);
   const analyses = analysisFile.analyses || {};
 
-  // 清理已滚出窗口的文章的分析，防止文件无限增长
+  // 清理很久不再出现的文章的分析，防止文件无限增长。
+  // 只删「不在当前窗口且分析已超过 45 天」的条目——单次抓取失败导致文章
+  // 暂时消失时，分析结果得以保留，feed 恢复后不必重复花钱分析。
   const liveIds = new Set(articlesFile.articles.map((a) => a.id));
-  for (const id of Object.keys(analyses)) {
-    if (!liveIds.has(id)) delete analyses[id];
+  const cutoff = Date.now() - 45 * 86400000;
+  for (const [id, a] of Object.entries(analyses)) {
+    if (!liveIds.has(id) && new Date(a.analyzed_at || 0).getTime() < cutoff) {
+      delete analyses[id];
+    }
   }
 
   const pending = articlesFile.articles
@@ -176,6 +181,10 @@ async function main() {
           ok++;
           console.log(`  ✔ ${article.title.slice(0, 60)}`);
         } catch (err) {
+          // 认证/额度类错误影响所有请求，立刻让 CI 失败以便发现，而不是安静地全军覆没
+          if (err?.status === 401 || err?.status === 403) {
+            throw new Error(`API 认证失败（HTTP ${err.status}）：请检查 ANTHROPIC_API_KEY`);
+          }
           failed++;
           console.warn(`  ✖ ${article.title.slice(0, 60)}: ${String(err.message || err).slice(0, 120)}`);
         }

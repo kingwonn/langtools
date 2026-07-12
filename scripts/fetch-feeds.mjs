@@ -119,9 +119,13 @@ async function main() {
     results.push(...(await Promise.all(batch.map(fetchSource))));
   }
 
+  const ts = (d) => {
+    const t = new Date(d || 0).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  };
   const articles = results
     .flatMap((r) => r.articles)
-    .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0));
+    .sort((a, b) => ts(b.date) - ts(a.date));
 
   const errors = results
     .filter((r) => r.error)

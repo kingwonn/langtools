@@ -23,6 +23,9 @@ const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) =>
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// 外部链接只放行 http(s)，防止 RSS 数据里混入 javascript: 等危险协议
+const safeUrl = (u) => (/^https?:\/\//i.test(String(u ?? '')) ? esc(u) : '#');
+
 const fmtDate = (iso) => {
   if (!iso) return '';
   const d = new Date(iso);
@@ -35,7 +38,10 @@ const fmtDate = (iso) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
-const dots = (n) => '●'.repeat(n) + '○'.repeat(3 - n);
+const dots = (n) => {
+  const lv = Math.min(3, Math.max(1, Number(n) || 1));
+  return '●'.repeat(lv) + '○'.repeat(3 - lv);
+};
 const DIFF_LABEL = { 1: '入门友好', 2: '中级', 3: '进阶' };
 const TYPE_LABEL = {
   blog: '博客', newsletter: '通讯', memo: '备忘录/信件', essay: '随笔', media: '媒体',
@@ -67,13 +73,17 @@ function initTheme() {
 /* ---------- 路由 ---------- */
 function route() {
   const hash = location.hash.replace(/^#\/?/, '') || 'feed';
-  const [page, param] = hash.split('/');
+  const [page, rawParam] = hash.split('/');
+  let param = rawParam;
+  try {
+    if (rawParam) param = decodeURIComponent(rawParam);
+  } catch { /* 非法编码时按原样处理 */ }
   document.querySelectorAll('#nav a').forEach((a) => {
     a.classList.toggle('active', a.dataset.route === page);
   });
   window.scrollTo({ top: 0 });
   if (page === 'sources') return renderSources();
-  if (page === 'wiki') return param ? renderWikiEntry(decodeURIComponent(param)) : renderWiki();
+  if (page === 'wiki') return param ? renderWikiEntry(param) : renderWiki();
   if (page === 'guide') return renderGuide();
   return renderFeed();
 }
@@ -137,10 +147,7 @@ function renderFeed() {
     b.addEventListener('click', () => { f.category = b.dataset.cat; renderFeed(); }));
   app.querySelectorAll('[data-diff]').forEach((b) =>
     b.addEventListener('click', () => { f.difficulty = b.dataset.diff; renderFeed(); }));
-  const search = app.querySelector('#feedSearch');
-  search.addEventListener('input', () => { f.q = search.value; renderFeed(); });
-  if (f.q) { search.focus(); search.setSelectionRange(f.q.length, f.q.length); }
-
+  bindSearch('#feedSearch', (v) => { f.q = v; renderFeed(); });
   bindArticleCards();
 }
 
@@ -159,7 +166,7 @@ function articleCard(a, src, an) {
         ${an?.read_minutes ? `<span>约 ${an.read_minutes} 分钟</span>` : ''}
         <span>${fmtDate(a.date)}</span>
       </div>
-      <h3 class="article-title lookup"><a href="${esc(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a></h3>
+      <h3 class="article-title lookup"><a href="${safeUrl(a.link)}" target="_blank" rel="noopener">${esc(a.title)}</a></h3>
       ${summary}
       ${an ? `<button class="article-expand" data-toggle>展开导读 ▾</button><div class="article-detail" hidden>${detail}</div>` : ''}
     </article>`;
@@ -189,6 +196,21 @@ function articleDetail(a, an) {
     ${vocab ? `<div class="detail-block"><h4>核心词汇（点击看原文例句）</h4><div class="vocab-list">${vocab}</div></div>` : ''}
     ${concepts ? `<div class="detail-block"><h4>关联概念</h4><div class="concept-links">${concepts}</div></div>` : ''}
   `;
+}
+
+// 输入即重渲染的搜索框：重建 DOM 后恢复焦点与光标位置
+function bindSearch(selector, onInput) {
+  const search = app.querySelector(selector);
+  if (!search) return;
+  search.addEventListener('input', () => {
+    state.lastSearch = selector;
+    onInput(search.value);
+  });
+  if (state.lastSearch === selector) {
+    const len = search.value.length;
+    search.focus();
+    search.setSelectionRange(len, len);
+  }
 }
 
 function bindArticleCards() {
@@ -240,9 +262,7 @@ function renderSources() {
     </div>
     ${sections || '<div class="empty">没有匹配的信息源。</div>'}
   `;
-  const search = app.querySelector('#srcSearch');
-  search.addEventListener('input', () => { state.sourceFilter.q = search.value; renderSources(); });
-  if (q) { search.focus(); search.setSelectionRange(search.value.length, search.value.length); }
+  bindSearch('#srcSearch', (v) => { state.sourceFilter.q = v; renderSources(); });
 }
 
 function sourceCard(s) {
@@ -324,9 +344,7 @@ function renderWiki() {
         : `<div class="empty">词条还在生长中。<div class="hint">配置 <code>ANTHROPIC_API_KEY</code> 后，流水线会从每天的新文章中提取概念并自动撰写词条。</div></div>`
     }
   `;
-  const search = app.querySelector('#wikiSearch');
-  search.addEventListener('input', () => { state.wikiFilter.q = search.value; renderWiki(); });
-  if (q) { search.focus(); search.setSelectionRange(search.value.length, search.value.length); }
+  bindSearch('#wikiSearch', (v) => { state.wikiFilter.q = v; renderWiki(); });
 }
 
 function renderWikiEntry(slug) {
@@ -347,7 +365,7 @@ function renderWikiEntry(slug) {
     .join('');
   const refs = (e.articles || [])
     .map(
-      (a) => `<li><a href="${esc(a.link)}" target="_blank" rel="noopener" class="lookup">${esc(a.title)}</a><span class="src">${esc(a.source || '')} · ${fmtDate(a.date)}</span></li>`,
+      (a) => `<li><a href="${safeUrl(a.link)}" target="_blank" rel="noopener" class="lookup">${esc(a.title)}</a><span class="src">${esc(a.source || '')} · ${fmtDate(a.date)}</span></li>`,
     )
     .join('');
   const misc = (e.misconceptions_zh || []).map((m) => `<p class="misconception">⚠️ ${esc(m)}</p>`).join('');
@@ -420,6 +438,7 @@ function renderGuide() {
 /* ---------- 查词 ---------- */
 function initDictionary() {
   const popup = document.getElementById('dictPopup');
+  let lookupSeq = 0; // 连续双击时只保留最后一次查询的结果
 
   document.addEventListener('dblclick', async (e) => {
     if (popup.contains(e.target)) return;
@@ -437,6 +456,7 @@ function initDictionary() {
   });
 
   async function showDictPopup(word, rect) {
+    const seq = ++lookupSeq;
     popup.innerHTML = `<h5>${esc(word)}</h5><div class="sense">查询中…</div>`;
     popup.hidden = false;
     positionPopup(rect);
@@ -446,18 +466,21 @@ function initDictionary() {
       const res = await fetch(`https://api.dictionaryapi.dev/api/v2/entries/en/${encodeURIComponent(word.toLowerCase())}`);
       if (res.ok) {
         const data = await res.json();
-        const entry = data[0];
-        const phonetic = entry.phonetic || entry.phonetics?.find((p) => p.text)?.text || '';
-        const senses = entry.meanings
-          ?.slice(0, 3)
-          .map((m) => {
-            const def = m.definitions?.[0];
-            return `<div class="sense"><span class="pos">${esc(m.partOfSpeech)}</span>${esc(def?.definition || '')}</div>`;
-          })
-          .join('');
-        body = `<h5>${esc(entry.word)} <span class="phonetic">${esc(phonetic)}</span></h5>${senses || ''}`;
+        const entry = Array.isArray(data) ? data[0] : null;
+        if (entry) {
+          const phonetic = entry.phonetic || entry.phonetics?.find((p) => p.text)?.text || '';
+          const senses = entry.meanings
+            ?.slice(0, 3)
+            .map((m) => {
+              const def = m.definitions?.[0];
+              return `<div class="sense"><span class="pos">${esc(m.partOfSpeech)}</span>${esc(def?.definition || '')}</div>`;
+            })
+            .join('');
+          body = `<h5>${esc(entry.word)} <span class="phonetic">${esc(phonetic)}</span></h5>${senses || ''}`;
+        }
       }
     } catch { /* 网络失败时走下方 fallback */ }
+    if (seq !== lookupSeq) return; // 已有更新的查询，丢弃本次结果
 
     if (!body) body = `<h5>${esc(word)}</h5><div class="sense">未找到英文释义，试试下方词典链接。</div>`;
 
@@ -505,4 +528,7 @@ async function main() {
   route();
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  app.innerHTML = `<div class="empty">页面出错了：${esc(err.message || err)}<div class="hint">刷新重试；若持续出现请检查 data/*.json 是否有效。</div></div>`;
+});
