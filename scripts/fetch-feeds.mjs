@@ -82,19 +82,36 @@ async function discoverFeed(siteUrl) {
   return null;
 }
 
+// 硬性墙钟超时：rss-parser 的空闲超时对「缓慢滴流」的响应（如 WAF 挑战页）不生效，
+// 必须用 Promise.race 兜底，否则单个源能吊死整个抓取步骤
+const SOURCE_BUDGET_MS = 90000;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} 超过 ${ms / 1000}s 硬超时`)), ms).unref?.(),
+  )]);
+}
+
+async function fetchSourceInner(source) {
+  let feed;
+  try {
+    feed = await parser.parseURL(source.feed);
+    if (!feed.items?.length) throw new Error('feed empty');
+  } catch (primaryErr) {
+    const discovered = await discoverFeed(source.url);
+    if (!discovered) throw primaryErr;
+    feed = discovered.feed;
+    console.warn(`  ↻ ${source.id}: 配置的 feed 失效，自动发现 → ${discovered.url}`);
+  }
+  return feed;
+}
+
 async function fetchSource(source) {
   if (!source.feed) return { source, articles: [], skipped: true };
   try {
-    let feed;
-    try {
-      feed = await parser.parseURL(source.feed);
-      if (!feed.items?.length) throw new Error('feed empty');
-    } catch (primaryErr) {
-      const discovered = await discoverFeed(source.url);
-      if (!discovered) throw primaryErr;
-      feed = discovered.feed;
-      console.warn(`  ↻ ${source.id}: 配置的 feed 失效，自动发现 → ${discovered.url}`);
-    }
+    const feed = await withTimeout(fetchSourceInner(source), SOURCE_BUDGET_MS, source.id);
     const articles = (feed.items || [])
       .filter((it) => it.link && it.title && /^https?:\/\//i.test(it.link))
       .slice(0, PER_SOURCE_LIMIT)
@@ -149,6 +166,9 @@ async function main() {
   console.log(`✔ feeds: ${ok} ok, ${errors.length} failed, ${results.filter((r) => r.skipped).length} skipped (no feed)`);
   console.log(`✔ ${articles.length} articles → site/data/articles.json`);
   for (const e of errors) console.warn(`  ✖ ${e.source}: ${e.error}`);
+
+  // 被硬超时放弃的请求可能仍挂在事件循环上，显式退出防止进程吊死
+  process.exit(0);
 }
 
 main().catch((err) => {
