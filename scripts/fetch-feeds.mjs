@@ -13,11 +13,14 @@ const PER_SOURCE_LIMIT = 12;
 const SNIPPET_CHARS = 6000; // 保留较长正文供 LLM 分析使用
 const CONCURRENCY = 6;
 
+// 完整的浏览器 UA：Substack 原生域名（*.substack.com）会对明显的 bot UA 返回 403
 const parser = new Parser({
   timeout: 25000,
   headers: {
-    'User-Agent': 'Mozilla/5.0 (compatible; ReadSphereBot/1.0; +https://github.com)',
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
     Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
   },
 });
 
@@ -52,7 +55,10 @@ async function discoverFeed(siteUrl) {
   const candidates = [];
   try {
     const res = await fetch(base.origin + base.pathname, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ReadSphereBot/1.0)' },
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+      },
       signal: AbortSignal.timeout(20000),
     });
     if (res.ok) {
