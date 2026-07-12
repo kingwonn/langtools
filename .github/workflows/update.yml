@@ -38,14 +38,23 @@ jobs:
         run: npm run analyze
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # 可选：换用更便宜的模型，如 claude-sonnet-5
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          # 可选：指定模型。Anthropic 直连如 claude-sonnet-5；
+          # OpenRouter 用其 slug，如 anthropic/claude-sonnet-4.5
           ANALYZE_MODEL: ${{ vars.ANALYZE_MODEL }}
 
       - name: Build wiki entries
         run: npm run wiki
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           ANALYZE_MODEL: ${{ vars.ANALYZE_MODEL }}
+
+      - name: Daily digest push (Feishu / WeChat, skipped if not configured)
+        run: node scripts/notify.mjs
+        env:
+          FEISHU_WEBHOOK_URL: ${{ secrets.FEISHU_WEBHOOK_URL }}
+          PUSHPLUS_TOKEN: ${{ secrets.PUSHPLUS_TOKEN }}
 
       - name: Commit updated data
         run: |

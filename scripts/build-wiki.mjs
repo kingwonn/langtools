@@ -2,8 +2,8 @@
 // - 新概念 → 调 Claude 生成完整词条（定义/为什么重要/要点/误解/相关概念/术语表）
 // - 已有概念 → 只增量追加引用文章，不重复生成
 // - 每次运行最多新建 MAX_NEW_ENTRIES 个词条
-// - 无 ANTHROPIC_API_KEY 时只更新文章引用，不新建词条
-import Anthropic from '@anthropic-ai/sdk';
+// - 未配置 API Key 时只更新文章引用与记忆入账，不新建/巩固词条
+import { llmJSON, llmProvider } from './lib/llm.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -11,7 +11,6 @@ import path from 'node:path';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DATA = path.join(ROOT, 'site', 'data');
 
-const MODEL = process.env.ANALYZE_MODEL || 'claude-opus-4-8';
 const MAX_NEW_ENTRIES = Number(process.env.WIKI_MAX_NEW_ENTRIES || 8);
 const MAX_ARTICLE_REFS = 15; // 每个词条最多保留的引用文章数
 const MAX_MEMORY_ITEMS = 40; // 每个词条记忆时间线的容量（保最新）
@@ -117,74 +116,44 @@ function normalizeSlug(slug) {
     .replace(/^-+|-+$/g, '');
 }
 
-async function generateEntry(client, slug, refs, existingSlugs) {
+async function generateEntry(slug, refs, existingSlugs) {
   const refLines = refs
     .slice(0, 6)
     .map((r) => `- ${r.title}${r.summary ? `：${r.summary.slice(0, 200)}` : ''}`)
     .join('\n');
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 16000,
-    thinking: { type: 'adaptive' },
-    output_config: {
-      effort: 'high',
-      format: { type: 'json_schema', schema: ENTRY_SCHEMA },
-    },
+  return llmJSON({
     system: SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: `概念 slug：${slug}
+    schema: ENTRY_SCHEMA,
+    effort: 'high',
+    user: `概念 slug：${slug}
 
 提到该概念的近期文章（供参考语境，词条应超越单篇文章、写成通用知识）：
 ${refLines || '（暂无文章上下文，凭领域知识撰写）'}
 
 已有词条 slug 列表（related 字段优先复用这些）：${existingSlugs.join(', ') || '(暂无)'}`,
-      },
-    ],
   });
-
-  if (response.stop_reason === 'refusal') throw new Error('model refused');
-  const text = response.content.find((b) => b.type === 'text')?.text;
-  if (!text) throw new Error('empty response');
-  return JSON.parse(text);
 }
 
 // 记忆巩固：把词条积累的观点记忆综合成「最新动态与争论」小节
-async function synthesizeEntry(client, entry) {
+async function synthesizeEntry(entry) {
   const memoryLines = (entry.memory || [])
     .slice(0, 25)
     .map((m) => `- [${m.date?.slice(0, 10) || '?'}][${m.dimension}] ${m.claim_zh}（${m.source}）`)
     .join('\n');
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 16000,
-    thinking: { type: 'adaptive' },
-    output_config: {
-      effort: 'high',
-      format: { type: 'json_schema', schema: SYNTHESIS_SCHEMA },
-    },
+  return llmJSON({
     system: SYSTEM,
-    messages: [
-      {
-        role: 'user',
-        content: `词条：${entry.title_zh}（${entry.title_en}）
+    schema: SYNTHESIS_SCHEMA,
+    effort: 'high',
+    user: `词条：${entry.title_zh}（${entry.title_en}）
 定义：${entry.definition_zh}
 
 以下是该概念近期积累的观点记忆（来自不同信息源的论断，可能相互矛盾）：
 ${memoryLines}
 
 请综合成 3-6 条「最新动态与争论」：合并同类观点、并列对立观点、忽略噪音；每条注明大致时间。这是词条的"记忆巩固"，读者会靠它快速了解该概念当下的状态。`,
-      },
-    ],
   });
-
-  if (response.stop_reason === 'refusal') throw new Error('model refused');
-  const text = response.content.find((b) => b.type === 'text')?.text;
-  if (!text) throw new Error('empty response');
-  return JSON.parse(text);
 }
 
 async function main() {
@@ -267,16 +236,15 @@ async function main() {
     .slice(0, MAX_NEW_ENTRIES);
 
   let created = 0;
-  if (newSlugs.length > 0 && !process.env.ANTHROPIC_API_KEY) {
-    console.log(`ℹ 有 ${newSlugs.length} 个新概念待生成，但 ANTHROPIC_API_KEY 未设置，跳过。`);
+  if (newSlugs.length > 0 && !llmProvider()) {
+    console.log(`ℹ 有 ${newSlugs.length} 个新概念待生成，但未配置 LLM API Key，跳过。`);
   } else if (newSlugs.length > 0) {
-    const client = new Anthropic();
-    console.log(`→ 生成 ${newSlugs.length} 个新词条（模型：${MODEL}）...`);
+    console.log(`→ 生成 ${newSlugs.length} 个新词条（provider：${llmProvider()}）...`);
     for (const slug of newSlugs) {
       try {
         const existingSlugs = Object.keys(entries);
         const refs = conceptRefs.get(slug);
-        const generated = await generateEntry(client, slug, refs, existingSlugs);
+        const generated = await generateEntry(slug, refs, existingSlugs);
         entries[slug] = {
           slug,
           ...generated,
@@ -322,13 +290,12 @@ async function main() {
     .sort((a, b) => (b.pending_synthesis || 0) - (a.pending_synthesis || 0))
     .slice(0, MAX_SYNTHESIS_PER_RUN);
 
-  if (dueForSynthesis.length > 0 && !process.env.ANTHROPIC_API_KEY) {
-    console.log(`ℹ ${dueForSynthesis.length} 个词条待巩固，但 ANTHROPIC_API_KEY 未设置，跳过。`);
+  if (dueForSynthesis.length > 0 && !llmProvider()) {
+    console.log(`ℹ ${dueForSynthesis.length} 个词条待巩固，但未配置 LLM API Key，跳过。`);
   } else if (dueForSynthesis.length > 0) {
-    const client = new Anthropic();
     for (const entry of dueForSynthesis) {
       try {
-        const result = await synthesizeEntry(client, entry);
+        const result = await synthesizeEntry(entry);
         entry.developments_zh = result.developments_zh;
         entry.pending_synthesis = 0;
         entry.updated_at = new Date().toISOString();

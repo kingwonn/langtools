@@ -1,9 +1,9 @@
-// LLM 分析：对 articles.json 中尚未分析的文章调用 Claude，产出
-// 中英摘要 / 难度分级 / 核心词汇 / 关联概念，写入 site/data/analysis.json。
+// LLM 分析：对 articles.json 中尚未分析的文章调用 LLM，产出
+// 中英摘要 / 难度分级 / 核心词汇 / 关联概念 / 观点记忆，写入 site/data/analysis.json。
 // - 增量：已分析的文章不重复调用
 // - 有上限：每次运行最多 MAX_PER_RUN 篇，成本可控
-// - 无 ANTHROPIC_API_KEY 时安静跳过，站点自动降级
-import Anthropic from '@anthropic-ai/sdk';
+// - 未配置 API Key（Anthropic 或 OpenRouter）时安静跳过，站点自动降级
+import { llmJSON, llmProvider } from './lib/llm.mjs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -11,7 +11,6 @@ import path from 'node:path';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const DATA = path.join(ROOT, 'site', 'data');
 
-const MODEL = process.env.ANALYZE_MODEL || 'claude-opus-4-8';
 const MAX_PER_RUN = Number(process.env.ANALYZE_MAX_PER_RUN || 20);
 const CONCURRENCY = 3;
 
@@ -107,7 +106,7 @@ const SYSTEM = `你是一个双语阅读助手，服务对象是一位以中文�
 - concepts 是知识库词条的索引：只选文章实质讨论的概念，不要泛泛的大词（如 "ai"、"technology"）
 - insights 是知识库的长期记忆：只提取真正有信息增量的论断（作者的明确判断、新数据、预测、与主流相反的观点），并注明它属于哪个维度；宁缺毋滥`;
 
-async function analyzeOne(client, article, sourceName, existingSlugs) {
+async function analyzeOne(article, sourceName, existingSlugs) {
   const userPrompt = `已有概念 slug 列表（优先复用）：${existingSlugs.join(', ') || '(暂无)'}
 
 来源：${sourceName}
@@ -115,24 +114,12 @@ async function analyzeOne(client, article, sourceName, existingSlugs) {
 正文（可能被截断）：
 ${article.snippet || '(RSS 未提供正文，仅根据标题保守分析)'}`;
 
-  const response = await client.messages.create({
-    model: MODEL,
-    max_tokens: 16000,
-    thinking: { type: 'adaptive' },
-    output_config: {
-      effort: 'medium',
-      format: { type: 'json_schema', schema: ANALYSIS_SCHEMA },
-    },
+  const result = await llmJSON({
     system: SYSTEM,
-    messages: [{ role: 'user', content: userPrompt }],
+    user: userPrompt,
+    schema: ANALYSIS_SCHEMA,
+    effort: 'medium',
   });
-
-  if (response.stop_reason === 'refusal') {
-    throw new Error('model refused');
-  }
-  const text = response.content.find((b) => b.type === 'text')?.text;
-  if (!text) throw new Error('empty response');
-  const result = JSON.parse(text);
   result.concepts = [...new Set(
     (result.concepts || []).map(normalizeSlug).filter((s) => s.length >= 2),
   )];
@@ -144,8 +131,8 @@ ${article.snippet || '(RSS 未提供正文，仅根据标题保守分析)'}`;
 }
 
 async function main() {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    console.log('ℹ ANTHROPIC_API_KEY 未设置，跳过 LLM 分析（站点将不显示文章分析）。');
+  if (!llmProvider()) {
+    console.log('ℹ 未配置 ANTHROPIC_API_KEY / OPENROUTER_API_KEY，跳过 LLM 分析（站点将不显示文章分析）。');
     return;
   }
 
@@ -192,8 +179,7 @@ async function main() {
     return;
   }
 
-  console.log(`→ 分析 ${pending.length} 篇新文章（模型：${MODEL}）...`);
-  const client = new Anthropic();
+  console.log(`→ 分析 ${pending.length} 篇新文章（provider：${llmProvider()}，模型：${process.env.ANALYZE_MODEL || '默认'}）...`);
 
   let ok = 0;
   let failed = 0;
@@ -203,7 +189,6 @@ async function main() {
       batch.map(async (article) => {
         try {
           const result = await analyzeOne(
-            client,
             article,
             sourceNames[article.source] || article.source,
             existingSlugs,

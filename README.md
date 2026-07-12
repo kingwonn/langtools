@@ -36,11 +36,17 @@ scripts/               后台流水线（Node ≥ 20）
 
 ## 部署（一次性设置）
 
-1. **启用 GitHub Pages**：仓库 Settings → Pages → Source 选 **GitHub Actions**
-2. **添加 API Key**：Settings → Secrets and variables → Actions → New repository secret
-   - Name: `ANTHROPIC_API_KEY`，Value: 你的 Anthropic API Key（[获取](https://platform.claude.com/)）
-3. （可选）Settings → Secrets and variables → Actions → Variables 添加 `ANALYZE_MODEL` 换用其他模型，默认 `claude-opus-4-8`（约 $5/$25 每百万输入/输出 token）。日更 20 篇的典型成本在每天几十美分量级；想更省可设为 `claude-sonnet-5` 或 `claude-haiku-4-5`
-4. 合并到 `main` 后，工作流会在每次 push、每天北京时间 06:30、以及手动触发（Actions → Update content & deploy → Run workflow）时运行
+首次运行时工作流会自动启用 GitHub Pages，无需手动设置。需要配置的只有 Secrets（Settings → Secrets and variables → Actions）：
+
+1. **LLM API Key（二选一）**：
+   - `ANTHROPIC_API_KEY`（推荐，结构化输出最稳，[获取](https://platform.claude.com/)），或
+   - `OPENROUTER_API_KEY`（[获取](https://openrouter.ai/)）——同时在 Variables 里设 `ANALYZE_MODEL` 为 OpenRouter 模型 slug（如 `anthropic/claude-sonnet-4.5`）
+2. （可选）Variables 添加 `ANALYZE_MODEL` 换模型。Anthropic 直连默认 `claude-opus-4-8`（约 $5/$25 每百万输入/输出 token，日更 20 篇的典型成本在每天几十美分量级）；想更省可设 `claude-sonnet-5` 或 `claude-haiku-4-5`
+3. （可选）**每日推送**：
+   - **飞书**：任意群 → 设置 → 群机器人 → 添加「自定义机器人」→ 复制 webhook 地址 → 存为 secret `FEISHU_WEBHOOK_URL`
+   - **微信**：关注 [PushPlus](https://www.pushplus.plus/) 公众号获取 token → 存为 secret `PUSHPLUS_TOKEN`
+   - 每天流水线跑完后自动推送英文学习摘要（精选文章 + 每日词汇卡）
+4. 工作流在每次 push、每天北京时间 06:30、以及手动触发（Actions → Update content & deploy → Run workflow）时运行
 
 ## 本地运行
 
