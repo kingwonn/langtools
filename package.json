@@ -1,0 +1,21 @@
+{
+  "name": "readsphere",
+  "version": "1.0.0",
+  "description": "精选英文博客聚合站：通过 AI / Physical AI / 投资领域的一流英文写作学英语，附 LLM 驱动的文章分析与知识 Wiki",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "fetch": "node scripts/fetch-feeds.mjs",
+    "analyze": "node scripts/analyze.mjs",
+    "wiki": "node scripts/build-wiki.mjs",
+    "update": "npm run fetch && npm run analyze && npm run wiki",
+    "dev": "python3 -m http.server 8788 --directory site"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "rss-parser": "^3.13.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

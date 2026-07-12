@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="精选 AI、Physical AI 与投资领域的一流英文博客，配合 LLM 文章分析与双语知识库，边读原文边学英语。">
+  <title>ReadSphere · 读原文，学英语，懂 AI 与投资</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📖</text></svg>">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="#/feed">
+        <span class="brand-mark">📖</span>
+        <span class="brand-text">
+          <span class="brand-name">ReadSphere</span>
+          <span class="brand-tag">读原文 · 学英语 · 懂 AI 与投资</span>
+        </span>
+      </a>
+      <nav class="site-nav" id="nav">
+        <a href="#/feed" data-route="feed">最新文章</a>
+        <a href="#/sources" data-route="sources">信息源</a>
+        <a href="#/wiki" data-route="wiki">知识库</a>
+        <a href="#/guide" data-route="guide">学习方法</a>
+      </nav>
+      <button class="theme-toggle" id="themeToggle" title="切换深浅色" aria-label="切换深浅色">🌗</button>
+    </div>
+  </header>
+
+  <main id="app" class="container">
+    <div class="loading">加载中…</div>
+  </main>
+
+  <footer class="site-footer">
+    <p>💡 在任何英文段落里<strong>双击一个单词</strong>即可查词。内容每日自动更新，分析与词条由 Claude 生成，仅供学习参考。</p>
+  </footer>
+
+  <div id="dictPopup" class="dict-popup" hidden></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
